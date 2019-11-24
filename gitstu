@@ -1,0 +1,4 @@
+#!/bin/bash
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
+
+deno --allow-run --allow-read --allow-write --importmap "$DIR/importmap.json" "$DIR/gitstu.ts"
