@@ -5,6 +5,7 @@ use std::io::{BufReader, BufWriter};
 use std::fs::File;
 use clap::{App, SubCommand, Arg};
 use dialoguer::{Input, Confirmation};
+use serde_json::to_string;
 
 fn main() {
     let subtree_arg = Arg::with_name("SUBTREE")
@@ -12,13 +13,23 @@ fn main() {
         .required(true)
         .index(1);
     let branch_arg = Arg::with_name("BRANCH")
-        .help("Selects which branch to use")
+        .help("Sets which branch to use")
         .required(false)
         .index(2);
     let matches = App::new("gitstu")
         .version("0.0.1")
         .about("Helper utility for working with git subtrees")
         .author("Jacob Biggs <biggs.jacob@gmail.com>")
+        .arg(Arg::with_name("remote")
+            .help("Sets the remote to use")
+            .short("r")
+            .long("remote")
+            .global(true))
+        .arg(Arg::with_name("prefix")
+            .help("Sets the prefix to use")
+            .short("p")
+            .long("prefix")
+            .global(true))
         .subcommand(SubCommand::with_name("init")
             .about("Creates a .gitstu for this repository"))
         .subcommand(SubCommand::with_name("add")
@@ -45,23 +56,41 @@ fn main() {
             "pull"|"push"|"add" => {
                 let mut config = load_config(&config_path);
                 let subtree_name = args.value_of("SUBTREE").unwrap();
-                let branch_name = args.value_of("BRANCH");
+                let branch_arg = args.value_of("BRANCH");
 
                 println!("{:?}: {:?}", subcommand, subtree_name);
 
                 match config.subtrees.iter_mut().find(|s| s.name == subtree_name) {
                     Some(subtree_config) => {
                         match subcommand {
-                            "pull" => {pull_subtree(subtree_config, branch_name)}
-                            "push" => {push_subtree(subtree_config, branch_name)}
-                            "add" => {add_subtree(subtree_config, branch_name)}
+                            "pull" => {pull_subtree(subtree_config, branch_arg)}
+                            "push" => {push_subtree(subtree_config, branch_arg)}
+                            "add" => {add_subtree(subtree_config, branch_arg)}
                             _ => {panic!()}
                         }
-
                     },
                     None => {
-                        eprintln!("Subtree {:?} not found in .gitstu", subtree_name);
-                        eprintln!("To define a new subtree: gitstu add {}", subtree_name);
+                        match subcommand {
+                            "add" => {
+                                let remote_arg = args.value_of("remote");
+                                let prefix_arg = args.value_of("prefix");
+                                let subtree_name = subtree_name.to_string();
+                                let mut subtree_config =  SubtreeConfig {
+                                    name: subtree_name.clone(),
+                                    prefix: prefix_arg.map(Into::into).unwrap_or_else(|| prompt_for("prefix", Some(subtree_name))),
+                                    branch: branch_arg.map(Into::into).or_else(||
+                                        Some(prompt_for("branch", Some("master".to_string())))),
+                                    remote: remote_arg.map(Into::into).or_else(||
+                                        Some(prompt_for("remote", None)))
+                                };
+
+                                add_subtree(&mut subtree_config, branch_arg);
+                            }
+                            _ => {
+                                eprintln!("Subtree {:?} not found in .gitstu", subtree_name);
+                                eprintln!("To define a new subtree: gitstu add {}", subtree_name);
+                            }
+                        }
                     }
                 }
 
@@ -89,6 +118,18 @@ fn save_config(path: &PathBuf, mut config: GitStuConfig) {
     serde_json::to_writer_pretty(writer, &config);
 }
 
+fn prompt_for(name: &str, default: Option<String>) -> String {
+    let mut prompt = Input::new();
+    prompt.with_prompt(name)
+        .allow_empty(false);
+
+    if let Some(default) = default {
+        prompt.default(default);
+    }
+
+    prompt.interact().unwrap()
+}
+
 fn pull_subtree(subtree_config: &mut SubtreeConfig, branch_arg: Option<&str>) {
     let (branch, remote) = branch_and_remote(subtree_config, branch_arg);
 
@@ -101,6 +142,7 @@ fn pull_subtree(subtree_config: &mut SubtreeConfig, branch_arg: Option<&str>) {
         .wait();
 
     persist_branch_name(subtree_config, &branch);
+    persist_remote(subtree_config, &remote);
 }
 
 fn push_subtree(subtree_config: &mut SubtreeConfig, branch_arg: Option<&str>) {
@@ -115,11 +157,27 @@ fn push_subtree(subtree_config: &mut SubtreeConfig, branch_arg: Option<&str>) {
         .wait();
 
     persist_branch_name(subtree_config, &branch);
+    persist_remote(subtree_config, &remote);
+}
+
+fn add_subtree(subtree_config: &mut SubtreeConfig, branch_arg: Option<&str>) {
+    let (branch, remote) = branch_and_remote(subtree_config, branch_arg);
+
+    println!("Add branch {:?} from remote {:?}", branch, remote);
+    Command::new("sh")
+        .arg("-c")
+        .arg(format!("git subtree add --prefix={} {} {}", subtree_config.prefix, remote, branch))
+        .spawn()
+        .expect("Failed to add subtree")
+        .wait();
+
+    persist_branch_name(subtree_config, &branch);
+    persist_remote(subtree_config, &remote);
 }
 
 /// Prompts the user to persist provided branch name to their .gitstu config if
 /// it differs from the name currently persisted or if there is none persisted
-fn persist_branch_name(subtree_config: &mut SubtreeConfig, branch: &String) -> () {
+fn persist_branch_name(subtree_config: &mut SubtreeConfig, branch: &String) {
     let branch_to_persist = match &subtree_config.branch {
         Some(branch_name) => {
             if branch_name != branch {
@@ -143,18 +201,28 @@ fn persist_branch_name(subtree_config: &mut SubtreeConfig, branch: &String) -> (
     }
 }
 
-fn add_subtree(subtree_config: &mut SubtreeConfig, branch_arg: Option<&str>) {
-    let (branch, remote) = branch_and_remote(subtree_config, branch_arg);
+fn persist_remote(subtree_config: &mut SubtreeConfig, remote: &String) {
+    let remote_to_persist = match &subtree_config.remote {
+        Some(remote_name) => {
+            if remote_name != remote {
+                Some(remote)
+            } else {
+                None
+            }
+        }
+        None => Some(remote)
+    };
+    if let Some(remote_name) = remote_to_persist {
+        let confirmation = Confirmation::new()
+            .with_text(format!("Do you want to save remote {:?} to .gitstu?", remote_name).as_ref())
+            .interact();
 
-    println!("Add branch {:?} from remote {:?}", branch, remote);
-    Command::new("sh")
-        .arg("-c")
-        .arg(format!("git subtree add --prefix={} {} {}", subtree_config.prefix, remote, branch))
-        .spawn()
-        .expect("Failed to add subtree")
-        .wait();
-
-    persist_branch_name(subtree_config, &branch);
+        match confirmation {
+            Ok(_) => {}
+            _ => { println!("Unable to read user input, not persisting remote") }
+        }
+        subtree_config.branch = Some(remote_name.to_string());
+    }
 }
 
 fn branch_and_remote(subtree_config: &SubtreeConfig, branch_arg: Option<&str>) -> (String, String) {
