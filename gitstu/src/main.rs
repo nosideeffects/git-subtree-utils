@@ -85,6 +85,7 @@ fn main() {
                                 };
 
                                 add_subtree(&mut subtree_config, branch_arg);
+                                config.subtrees.push(subtree_config);
                             }
                             _ => {
                                 eprintln!("Subtree {:?} not found in .gitstu", subtree_name);

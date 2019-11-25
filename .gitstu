@@ -1,6 +1,12 @@
 {
   "subtrees": [
     {
+      "name": "hoopla",
+      "prefix": "hoopla",
+      "branch": "master",
+      "remote": "git@github.com:nosideeffects/dummy-scratch.git"
+    },
+    {
       "name": "wat-even-though",
       "prefix": "test",
       "branch": "master",
