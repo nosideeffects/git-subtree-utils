@@ -30,6 +30,11 @@ fn main() {
             .short("p")
             .long("prefix")
             .global(true))
+        .arg(Arg::with_name("squash")
+            .help("Squashes commits")
+            .short("s")
+            .long("squash")
+            .global(true))
         .subcommand(SubCommand::with_name("init")
             .about("Creates a .gitstu for this repository"))
         .subcommand(SubCommand::with_name("add")
@@ -57,15 +62,16 @@ fn main() {
                 let mut config = load_config(&config_path);
                 let subtree_name = args.value_of("SUBTREE").unwrap();
                 let branch_arg = args.value_of("BRANCH");
+                let squash = args.is_present("squash") || config.squash.unwrap_or(false);
 
                 println!("{:?}: {:?}", subcommand, subtree_name);
 
                 match config.subtrees.iter_mut().find(|s| s.name == subtree_name) {
                     Some(subtree_config) => {
                         match subcommand {
-                            "pull" => {pull_subtree(subtree_config, branch_arg)}
+                            "pull" => {pull_subtree(subtree_config, branch_arg, squash)}
                             "push" => {push_subtree(subtree_config, branch_arg)}
-                            "add" => {add_subtree(subtree_config, branch_arg)}
+                            "add" => {add_subtree(subtree_config, branch_arg, squash)}
                             _ => {panic!()}
                         }
                     },
@@ -84,7 +90,7 @@ fn main() {
                                         Some(prompt_for("remote", None)))
                                 };
 
-                                add_subtree(&mut subtree_config, branch_arg);
+                                add_subtree(&mut subtree_config, branch_arg, squash);
                                 config.subtrees.push(subtree_config);
                             }
                             _ => {
@@ -131,13 +137,17 @@ fn prompt_for(name: &str, default: Option<String>) -> String {
     prompt.interact().unwrap()
 }
 
-fn pull_subtree(subtree_config: &mut SubtreeConfig, branch_arg: Option<&str>) {
+fn pull_subtree(subtree_config: &mut SubtreeConfig, branch_arg: Option<&str>, squash: bool) {
     let (branch, remote) = branch_and_remote(subtree_config, branch_arg);
 
     println!("Pulling branch {:?} from remote {:?}", branch, remote);
+    let mut command = format!("git subtree pull --prefix={} {} {}", subtree_config.prefix, remote, branch);
+    if squash {
+        command.push_str(" --squash");
+    }
     Command::new("sh")
         .arg("-c")
-        .arg(format!("git subtree pull --prefix={} {} {}", subtree_config.prefix, remote, branch))
+        .arg(command)
         .spawn()
         .expect("Failed to pull subtree")
         .wait();
@@ -161,13 +171,17 @@ fn push_subtree(subtree_config: &mut SubtreeConfig, branch_arg: Option<&str>) {
     persist_remote(subtree_config, &remote);
 }
 
-fn add_subtree(subtree_config: &mut SubtreeConfig, branch_arg: Option<&str>) {
+fn add_subtree(subtree_config: &mut SubtreeConfig, branch_arg: Option<&str>, squash: bool) {
     let (branch, remote) = branch_and_remote(subtree_config, branch_arg);
 
     println!("Add branch {:?} from remote {:?}", branch, remote);
+    let mut command = format!("git subtree add --prefix={} {} {}", subtree_config.prefix, remote, branch);
+    if squash {
+        command.push_str(" --squash");
+    }
     Command::new("sh")
         .arg("-c")
-        .arg(format!("git subtree add --prefix={} {} {}", subtree_config.prefix, remote, branch))
+        .arg(command)
         .spawn()
         .expect("Failed to add subtree")
         .wait();
@@ -266,6 +280,8 @@ fn get_git_root() -> String {
 
 #[derive(Deserialize, Debug, Serialize)]
 struct GitStuConfig {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    squash: Option<bool>,
     subtrees: Vec<SubtreeConfig>
 }
 
