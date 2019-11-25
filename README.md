@@ -20,7 +20,7 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 echo -e '\n# Cargo\nsource $HOME/.cargo/env' >> ~/.bashrc
 
 # Install gitstu
-cargo install --path ./rust/
+cargo install --path ./gitstu/
 
 # See what it can do
 gitstu -h
