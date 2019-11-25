@@ -4,13 +4,17 @@ use std::path::Path;
 use std::io::BufReader;
 use std::fs::File;
 use clap::{App, SubCommand, Arg};
-use dialoguer::Input;
+use dialoguer::{Input, Confirmation};
 
 fn main() {
     let subtree_arg = Arg::with_name("SUBTREE")
         .help("Sets the subtree to use")
         .required(true)
         .index(1);
+    let branch_arg = Arg::with_name("BRANCH")
+        .help("Selects which branch to use")
+        .required(false)
+        .index(2);
     let matches = App::new("gitstu")
         .version("0.0.1")
         .about("Helper utility for working with git subtrees")
@@ -19,36 +23,37 @@ fn main() {
             .about("Creates a .gitstu for this repository"))
         .subcommand(SubCommand::with_name("add")
             .about("Define a new subtree configuration")
-            .arg(subtree_arg.clone()))
+            .arg(&subtree_arg)
+            .arg(&branch_arg))
         .subcommand(SubCommand::with_name("pull")
             .about("Pulls a subtree from a remote")
-            .arg(subtree_arg.clone()))
+            .arg(&subtree_arg)
+            .arg(&branch_arg))
         .subcommand(SubCommand::with_name("push")
             .about("Pushes a subtree to a remote")
-            .arg(subtree_arg.clone()))
+            .arg(&subtree_arg)
+            .arg(&branch_arg))
         .subcommand(SubCommand::with_name("refresh")
             .about("Retrieves remote branch information"))
         .get_matches();
 
     let git_root = get_git_root();
-    println!("Git root: {}", git_root);
-
-    let config = load_config(&git_root);
-    println!("{:?}", config);
 
     if let (subcommand, Some(args)) = matches.subcommand() {
         match subcommand {
             "pull"|"push"|"add" => {
+                let mut config = load_config(&git_root);
                 let subtree_name = args.value_of("SUBTREE").unwrap();
+                let branch_name = args.value_of("BRANCH");
 
                 println!("{:?}: {:?}", subcommand, subtree_name);
 
-                match config.subtrees.iter().find(|s| s.name == subtree_name) {
+                match config.subtrees.iter_mut().find(|s| s.name == subtree_name) {
                     Some(subtree_config) => {
                         match subcommand {
-                            "pull" => {pull_subtree(subtree_config)}
+                            "pull" => {pull_subtree(subtree_config, branch_name)}
                             "push" => {}
-                            "add" => {add_subtree(subtree_config)}
+                            "add" => {add_subtree(subtree_config, branch_name)}
                             _ => {panic!()}
                         }
 
@@ -75,8 +80,8 @@ fn load_config(git_root: &String) -> GitStuConfig {
     config
 }
 
-fn pull_subtree(subtree_config: &SubtreeConfig) {
-    let (branch, remote) = branch_and_remote(subtree_config);
+fn pull_subtree(subtree_config: &mut SubtreeConfig, branch_arg: Option<&str>) {
+    let (branch, remote) = branch_and_remote(subtree_config, branch_arg);
 
     println!("Pulling branch {:?} from remote {:?}", branch, remote);
     Command::new("sh")
@@ -85,10 +90,30 @@ fn pull_subtree(subtree_config: &SubtreeConfig) {
         .spawn()
         .expect("Failed to pull subtree")
         .wait();
+
+    if let Some(branch_name) = &subtree_config.branch {
+      if branch_name != &branch {
+          persist_branch_name(subtree_config, &branch);
+      }
+    } else {
+        persist_branch_name(subtree_config, &branch)
+    }
 }
 
-fn add_subtree(subtree_config: &SubtreeConfig) {
-    let (branch, remote) = branch_and_remote(subtree_config);
+fn persist_branch_name(subtree_config: &mut SubtreeConfig, branch_name: &String) {
+    let confirmation = Confirmation::new()
+        .with_text(format!("Do you want to save branch {:?} to .gitstu?", branch_name).as_ref())
+        .interact();
+
+    match confirmation {
+        Ok(_) => {}
+        _ => {println!("Unable to read user input, not persisting branch")}
+    }
+    subtree_config.branch = Some(branch_name.to_string());
+}
+
+fn add_subtree(subtree_config: &mut SubtreeConfig, branch_arg: Option<&str>) {
+    let (branch, remote) = branch_and_remote(subtree_config, branch_arg);
 
     println!("Add branch {:?} from remote {:?}", branch, remote);
     Command::new("sh")
@@ -99,10 +124,11 @@ fn add_subtree(subtree_config: &SubtreeConfig) {
         .wait();
 }
 
-fn branch_and_remote(subtree_config: &SubtreeConfig) -> (String, String) {
+fn branch_and_remote(subtree_config: &SubtreeConfig, branch_arg: Option<&str>) -> (String, String) {
     let branch = subtree_config.branch.clone().unwrap_or_else(|| {
+        let default_branch = branch_arg.unwrap_or("master");
         Input::new().with_prompt("Branch name")
-            .default("master".to_string())
+            .default(default_branch.to_string())
             .interact()
             .unwrap()
     });
