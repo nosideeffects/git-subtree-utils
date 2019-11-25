@@ -3,6 +3,7 @@
     {
       "name": "wat-even-though",
       "prefix": "test",
+      "branch": "master",
       "remote": "git@github.com:nosideeffects/dummy-scratch.git"
     }
   ]
