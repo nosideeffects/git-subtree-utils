@@ -45,7 +45,13 @@ fn main() {
 
                 match config.subtrees.iter().find(|s| s.name == subtree_name) {
                     Some(subtree_config) => {
-                        pull_subtree(subtree_config);
+                        match subcommand {
+                            "pull" => {pull_subtree(subtree_config)}
+                            "push" => {}
+                            "add" => {add_subtree(subtree_config)}
+                            _ => {panic!()}
+                        }
+
                     },
                     None => {
                         eprintln!("Subtree {:?} not found in .gitstu", subtree_name);
@@ -70,6 +76,28 @@ fn load_config(git_root: &String) -> GitStuConfig {
 }
 
 fn pull_subtree(subtree_config: &SubtreeConfig) {
+    let (branch, remote) = branch_and_remote(subtree_config);
+
+    println!("Pulling branch {:?} from remote {:?}", branch, remote);
+    Command::new("sh")
+        .arg("-c")
+        .arg(format!("git subtree pull --prefix={} {} {}", subtree_config.prefix, remote, branch))
+        .spawn()
+        .expect("Failed to pull subtree");
+}
+
+fn add_subtree(subtree_config: &SubtreeConfig) {
+    let (branch, remote) = branch_and_remote(subtree_config);
+
+    println!("Add branch {:?} from remote {:?}", branch, remote);
+    Command::new("sh")
+        .arg("-c")
+        .arg(format!("git subtree add --prefix={} {} {}", subtree_config.prefix, remote, branch))
+        .spawn()
+        .expect("Failed to add subtree");
+}
+
+fn branch_and_remote(subtree_config: &SubtreeConfig) -> (String, String) {
     let branch = subtree_config.branch.clone().unwrap_or_else(|| {
         Input::new().with_prompt("Branch name")
             .default("master".to_string())
@@ -79,10 +107,7 @@ fn pull_subtree(subtree_config: &SubtreeConfig) {
     let remote = subtree_config.remote.clone().unwrap_or_else(|| {
         Input::new().with_prompt("Git remote or url").interact().unwrap()
     });
-
-    println!("Pulling branch {:?} from remote {:?}", branch, remote);
-
-    
+    (branch, remote)
 }
 
 fn get_git_root() -> String {
