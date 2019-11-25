@@ -10,11 +10,12 @@ use serde_json::to_string;
 fn main() {
     let subtree_arg = Arg::with_name("SUBTREE")
         .help("Sets the subtree to use")
-        .required(true)
+        .required_unless("all")
         .index(1);
     let branch_arg = Arg::with_name("BRANCH")
         .help("Sets which branch to use")
         .required(false)
+        .conflicts_with("branch")
         .index(2);
     let matches = App::new("gitstu")
         .version("0.0.1")
@@ -24,16 +25,29 @@ fn main() {
             .help("Sets the remote to use")
             .short("r")
             .long("remote")
+            .takes_value(true)
             .global(true))
         .arg(Arg::with_name("prefix")
             .help("Sets the prefix to use")
             .short("p")
             .long("prefix")
+            .takes_value(true)
+            .global(true))
+        .arg(Arg::with_name("branch")
+            .help("Sets the prefix to use")
+            .short("b")
+            .long("branch")
+            .takes_value(true)
             .global(true))
         .arg(Arg::with_name("squash")
             .help("Squashes commits")
             .short("s")
             .long("squash")
+            .global(true))
+        .arg(Arg::with_name("all")
+            .help("Runs command against all subtrees")
+            .short("a")
+            .long("all")
             .global(true))
         .subcommand(SubCommand::with_name("init")
             .about("Creates a .gitstu for this repository"))
@@ -60,43 +74,56 @@ fn main() {
         match subcommand {
             "pull"|"push"|"add" => {
                 let mut config = load_config(&config_path);
-                let subtree_name = args.value_of("SUBTREE").unwrap();
-                let branch_arg = args.value_of("BRANCH");
+                let branch_arg = args.value_of("BRANCH").or(args.value_of("branch"));
                 let squash = args.is_present("squash") || config.squash.unwrap_or(false);
+                let all_subtrees = args.is_present("all");
 
-                println!("{:?}: {:?}", subcommand, subtree_name);
+                let subtrees = if all_subtrees {
+                    Some(config.subtrees.clone())
+                } else {
+                    let subtree_name = args.value_of("SUBTREE").unwrap();
+                    match config.subtrees.iter_mut().find(|s| s.name == subtree_name) {
+                        Some(subtree_config) => {
+                            let mut subtrees = vec![subtree_config.clone()];
+                            Some(subtrees)
+                        },
+                        None => {
+                            match subcommand {
+                                "add" => {
+                                    let remote_arg = args.value_of("remote");
+                                    let prefix_arg = args.value_of("prefix");
+                                    let subtree_name = subtree_name.to_string();
+                                    let subtree_config = SubtreeConfig {
+                                        name: subtree_name.clone(),
+                                        prefix: prefix_arg.map(Into::into).unwrap_or_else(|| prompt_for("prefix", Some(subtree_name))),
+                                        branch: branch_arg.map(Into::into).or_else(||
+                                            Some(prompt_for("branch", Some("master".to_string())))),
+                                        remote: remote_arg.map(Into::into).or_else(||
+                                            Some(prompt_for("remote", None)))
+                                    };
 
-                match config.subtrees.iter_mut().find(|s| s.name == subtree_name) {
-                    Some(subtree_config) => {
-                        match subcommand {
-                            "pull" => {pull_subtree(subtree_config, branch_arg, squash)}
-                            "push" => {push_subtree(subtree_config, branch_arg)}
-                            "add" => {add_subtree(subtree_config, branch_arg, squash)}
-                            _ => {panic!()}
+                                    let mut subtrees = vec![subtree_config.clone()];
+                                    config.subtrees.push(subtree_config);
+                                    Some(subtrees.clone())
+                                }
+                                _ => {
+                                    eprintln!("Subtree {:?} not found in .gitstu", subtree_name);
+                                    eprintln!("To define a new subtree: gitstu add {}", subtree_name);
+                                    None
+                                }
+                            }
                         }
-                    },
-                    None => {
-                        match subcommand {
-                            "add" => {
-                                let remote_arg = args.value_of("remote");
-                                let prefix_arg = args.value_of("prefix");
-                                let subtree_name = subtree_name.to_string();
-                                let mut subtree_config =  SubtreeConfig {
-                                    name: subtree_name.clone(),
-                                    prefix: prefix_arg.map(Into::into).unwrap_or_else(|| prompt_for("prefix", Some(subtree_name))),
-                                    branch: branch_arg.map(Into::into).or_else(||
-                                        Some(prompt_for("branch", Some("master".to_string())))),
-                                    remote: remote_arg.map(Into::into).or_else(||
-                                        Some(prompt_for("remote", None)))
-                                };
+                    }
+                };
 
-                                add_subtree(&mut subtree_config, branch_arg, squash);
-                                config.subtrees.push(subtree_config);
-                            }
-                            _ => {
-                                eprintln!("Subtree {:?} not found in .gitstu", subtree_name);
-                                eprintln!("To define a new subtree: gitstu add {}", subtree_name);
-                            }
+                println!("{:?}", subtrees);
+                if let Some(subtrees) = subtrees {
+                    for mut subtree_config in subtrees {
+                        match subcommand {
+                            "pull" => {pull_subtree(&mut subtree_config, branch_arg, squash)}
+                            "push" => {push_subtree(&mut subtree_config, branch_arg)}
+                            "add" => {add_subtree(&mut subtree_config, branch_arg, squash)}
+                            _ => {panic!()}
                         }
                     }
                 }
@@ -285,7 +312,7 @@ struct GitStuConfig {
     subtrees: Vec<SubtreeConfig>
 }
 
-#[derive(Deserialize, Debug, Serialize)]
+#[derive(Deserialize, Debug, Serialize, Clone)]
 struct SubtreeConfig {
     name: String,
     prefix: String,
