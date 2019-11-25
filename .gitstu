@@ -1,0 +1,9 @@
+{
+  "subtrees": [
+    {
+      "name": "wat-even-though",
+      "prefix": "test",
+      "remote": "git@github.com:nosideeffects/dummy-scratch.git"
+    }
+  ]
+}

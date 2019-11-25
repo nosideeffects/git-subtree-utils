@@ -8,9 +8,9 @@
     "moduleResolution": "node",
     "noEmit": true,
     "paths": {
-      "http://*": ["../../.cache/deno/deps/http/*"],
-      "https://*": ["../../.cache/deno/deps/https/*"],
-      "std/*": ["../../.cache/deno/deps/https/deno.land/std/*"]
+      "http://*": ["../../../.cache/deno/deps/http/*"],
+      "https://*": ["../../../.cache/deno/deps/https/*"],
+      "std/*": ["../../../.cache/deno/deps/https/deno.land/std/*"]
     },
     "plugins": [ { "name": "deno_ls_plugin" } ],
     "pretty": true,

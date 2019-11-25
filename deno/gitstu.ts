@@ -1,5 +1,3 @@
-import {readJson} from "std/fs/mod.ts";
-
 const utf8TextDecoder = new TextDecoder("utf8");
 
 (async function () {
