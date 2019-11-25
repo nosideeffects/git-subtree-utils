@@ -83,7 +83,8 @@ fn pull_subtree(subtree_config: &SubtreeConfig) {
         .arg("-c")
         .arg(format!("git subtree pull --prefix={} {} {}", subtree_config.prefix, remote, branch))
         .spawn()
-        .expect("Failed to pull subtree");
+        .expect("Failed to pull subtree")
+        .wait();
 }
 
 fn add_subtree(subtree_config: &SubtreeConfig) {
@@ -94,7 +95,8 @@ fn add_subtree(subtree_config: &SubtreeConfig) {
         .arg("-c")
         .arg(format!("git subtree add --prefix={} {} {}", subtree_config.prefix, remote, branch))
         .spawn()
-        .expect("Failed to add subtree");
+        .expect("Failed to add subtree")
+        .wait();
 }
 
 fn branch_and_remote(subtree_config: &SubtreeConfig) -> (String, String) {
