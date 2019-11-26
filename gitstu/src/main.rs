@@ -10,7 +10,7 @@ use serde_json::to_string;
 fn main() {
     let subtree_arg = Arg::with_name("SUBTREE")
         .help("Sets the subtree to use")
-        .required_unless("all")
+        .required_unless_one(&["all", "with-branch"])
         .index(1);
     let branch_arg = Arg::with_name("BRANCH")
         .help("Sets which branch to use")
@@ -48,6 +48,14 @@ fn main() {
             .help("Runs command against all subtrees")
             .short("a")
             .long("all")
+            .conflicts_with("SUBTREE")
+            .global(true))
+        .arg(Arg::with_name("with-branch")
+            .help("Runs command against all subtrees")
+            .short("B")
+            .long("with-branch")
+            .takes_value(true)
+            .requires("all")
             .global(true))
         .subcommand(SubCommand::with_name("init")
             .about("Creates a .gitstu for this repository"))
@@ -79,7 +87,13 @@ fn main() {
                 let all_subtrees = args.is_present("all");
 
                 let subtrees = if all_subtrees {
-                    Some(config.subtrees.clone())
+                    if let Some(with_branch) = args.value_of("with-branch") {
+                        let subtrees = config.subtrees.iter().cloned()
+                            .filter(|s| s.branch == Some(with_branch.to_string())).collect();
+                        Some(subtrees)
+                    } else {
+                        Some(config.subtrees.clone())
+                    }
                 } else {
                     let subtree_name = args.value_of("SUBTREE").unwrap();
                     match config.subtrees.iter_mut().find(|s| s.name == subtree_name) {
