@@ -140,7 +140,7 @@ fn main() {
                     for mut subtree_config in subtrees {
                         match subcommand {
                             "pull" => {pull_subtree(&mut subtree_config, branch_arg, squash)}
-                            "push" => {push_subtree(&mut subtree_config, &matches)}
+                            "push" => {push_subtree(&mut subtree_config, &args)}
                             "add" => {add_subtree(&mut subtree_config, branch_arg, squash)}
                             _ => {panic!()}
                         }
@@ -203,7 +203,9 @@ fn pull_subtree(subtree_config: &mut SubtreeConfig, branch_arg: Option<&str>, sq
 }
 
 fn push_subtree(subtree_config: &mut SubtreeConfig, args: &ArgMatches) {
-    let branch_arg = args.value_of("BRANCH").or(args.value_of("to-branch"));
+    let branch_arg = args.value_of("BRANCH")
+        .or(args.value_of("to-branch"))
+        .or(args.value_of("branch"));
     let (branch, remote) = branch_and_remote(subtree_config, branch_arg);
 
     println!("Pushing branch {:?} to remote {:?}", branch, remote);
