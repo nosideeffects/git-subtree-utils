@@ -3,7 +3,7 @@ use std::process::{Command, exit};
 use std::path::{Path, PathBuf};
 use std::io::{BufReader, BufWriter};
 use std::fs::File;
-use clap::{App, SubCommand, Arg};
+use clap::{App, SubCommand, Arg, ArgMatches};
 use dialoguer::{Input, Confirmation};
 use serde_json::to_string;
 
@@ -15,7 +15,7 @@ fn main() {
     let branch_arg = Arg::with_name("BRANCH")
         .help("Sets which branch to use")
         .required(false)
-        .conflicts_with("branch")
+        .conflicts_with_all(&["branch", "to-branch"])
         .index(2);
     let matches = App::new("gitstu")
         .version("0.0.1")
@@ -34,7 +34,7 @@ fn main() {
             .takes_value(true)
             .global(true))
         .arg(Arg::with_name("branch")
-            .help("Sets the prefix to use")
+            .help("Sets the branch to use")
             .short("b")
             .long("branch")
             .takes_value(true)
@@ -51,8 +51,8 @@ fn main() {
             .conflicts_with("SUBTREE")
             .global(true))
         .arg(Arg::with_name("with-branch")
-            .help("Runs command against all subtrees")
-            .short("B")
+            .help("Filter currently to subtree with current branch")
+            .short("w")
             .long("with-branch")
             .takes_value(true)
             .requires("all")
@@ -70,7 +70,13 @@ fn main() {
         .subcommand(SubCommand::with_name("push")
             .about("Pushes a subtree to a remote")
             .arg(&subtree_arg)
-            .arg(&branch_arg))
+            .arg(&branch_arg)
+            .arg(Arg::with_name("to-branch")
+                .help("Sets the branch to push to")
+                .short("t")
+                .long("to-branch")
+                .takes_value(true)
+                .requires("all")))
         .subcommand(SubCommand::with_name("refresh")
             .about("Retrieves remote branch information"))
         .get_matches();
@@ -135,7 +141,7 @@ fn main() {
                     for mut subtree_config in subtrees {
                         match subcommand {
                             "pull" => {pull_subtree(&mut subtree_config, branch_arg, squash)}
-                            "push" => {push_subtree(&mut subtree_config, branch_arg)}
+                            "push" => {push_subtree(&mut subtree_config, &matches)}
                             "add" => {add_subtree(&mut subtree_config, branch_arg, squash)}
                             _ => {panic!()}
                         }
@@ -197,7 +203,8 @@ fn pull_subtree(subtree_config: &mut SubtreeConfig, branch_arg: Option<&str>, sq
     persist_remote(subtree_config, &remote);
 }
 
-fn push_subtree(subtree_config: &mut SubtreeConfig, branch_arg: Option<&str>) {
+fn push_subtree(subtree_config: &mut SubtreeConfig, args: &ArgMatches) {
+    let branch_arg = args.value_of("BRANCH").or(args.value_of("to-branch"));
     let (branch, remote) = branch_and_remote(subtree_config, branch_arg);
 
     println!("Pushing branch {:?} to remote {:?}", branch, remote);
@@ -208,8 +215,10 @@ fn push_subtree(subtree_config: &mut SubtreeConfig, branch_arg: Option<&str>) {
         .expect("Failed to pull subtree")
         .wait();
 
-    persist_branch_name(subtree_config, &branch);
-    persist_remote(subtree_config, &remote);
+    if !args.is_present("all") && !args.is_present("to-branch") {
+        persist_branch_name(subtree_config, &branch);
+        persist_remote(subtree_config, &remote);
+    }
 }
 
 fn add_subtree(subtree_config: &mut SubtreeConfig, branch_arg: Option<&str>, squash: bool) {
