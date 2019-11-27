@@ -75,8 +75,7 @@ fn main() {
                 .help("Sets the branch to push to")
                 .short("t")
                 .long("to-branch")
-                .takes_value(true)
-                .requires("all")))
+                .takes_value(true)))
         .subcommand(SubCommand::with_name("refresh")
             .about("Retrieves remote branch information"))
         .get_matches();
