@@ -149,7 +149,7 @@ fn main() {
 
                 save_config(&config_path, config);
             }
-            "init" => {}
+            "init" => {unimplemented!()}
             _ => panic!("Unrecognized subcommand")
         }
     }
@@ -267,6 +267,8 @@ fn persist_branch_name(subtree_config: &mut SubtreeConfig, branch: &String) {
     }
 }
 
+/// Prompts the user to persist provided remote to their .gitstu config if
+/// it differs from the remote currently persisted or if there is none persisted
 fn persist_remote(subtree_config: &mut SubtreeConfig, remote: &String) {
     let remote_to_persist = match &subtree_config.remote {
         Some(remote_name) => {
