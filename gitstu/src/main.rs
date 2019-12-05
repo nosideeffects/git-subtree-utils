@@ -6,6 +6,7 @@ use std::fs::File;
 use clap::{App, SubCommand, Arg, ArgMatches};
 use dialoguer::{Input, Confirmation};
 use serde_json::to_string;
+use itertools::Itertools;
 
 fn main() {
     let subtree_arg = Arg::with_name("SUBTREE")
@@ -17,6 +18,11 @@ fn main() {
         .required(false)
         .conflicts_with_all(&["branch", "to-branch"])
         .index(2);
+    let to_branch_arg = Arg::with_name("to-branch")
+        .help("Sets the branch to push to")
+        .short("t")
+        .long("to-branch")
+        .takes_value(true);
     let matches = App::new("gitstu")
         .version("0.0.1")
         .about("Helper utility for working with git subtrees")
@@ -66,16 +72,13 @@ fn main() {
         .subcommand(SubCommand::with_name("pull")
             .about("Pulls a subtree from a remote")
             .arg(&subtree_arg)
-            .arg(&branch_arg))
+            .arg(&branch_arg)
+            .arg(&to_branch_arg))
         .subcommand(SubCommand::with_name("push")
             .about("Pushes a subtree to a remote")
             .arg(&subtree_arg)
             .arg(&branch_arg)
-            .arg(Arg::with_name("to-branch")
-                .help("Sets the branch to push to")
-                .short("t")
-                .long("to-branch")
-                .takes_value(true)))
+            .arg(&to_branch_arg))
         .subcommand(SubCommand::with_name("refresh")
             .about("Retrieves remote branch information"))
         .get_matches();
@@ -136,8 +139,8 @@ fn main() {
                 };
 
                 println!("{:?}", subtrees);
-                if let Some(subtrees) = subtrees {
-                    for mut subtree_config in subtrees {
+                if let Some(mut subtrees) = subtrees {
+                    for mut subtree_config in &mut subtrees {
                         match subcommand {
                             "pull" => {pull_subtree(&mut subtree_config, &args, squash)}
                             "push" => {push_subtree(&mut subtree_config, &args)}
@@ -145,6 +148,10 @@ fn main() {
                             _ => {panic!()}
                         }
                     }
+
+                    subtrees.append(&mut config.subtrees);
+
+                    config.subtrees = subtrees.into_iter().unique_by(|subtree| subtree.name.clone()).collect();
                 }
 
                 save_config(&config_path, config);
