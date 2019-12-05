@@ -139,7 +139,7 @@ fn main() {
                 if let Some(subtrees) = subtrees {
                     for mut subtree_config in subtrees {
                         match subcommand {
-                            "pull" => {pull_subtree(&mut subtree_config, branch_arg, squash)}
+                            "pull" => {pull_subtree(&mut subtree_config, &args, squash)}
                             "push" => {push_subtree(&mut subtree_config, &args)}
                             "add" => {add_subtree(&mut subtree_config, branch_arg, squash)}
                             _ => {panic!()}
@@ -183,7 +183,10 @@ fn prompt_for(name: &str, default: Option<String>) -> String {
     prompt.interact().unwrap()
 }
 
-fn pull_subtree(subtree_config: &mut SubtreeConfig, branch_arg: Option<&str>, squash: bool) {
+fn pull_subtree(subtree_config: &mut SubtreeConfig, args: &ArgMatches, squash: bool) {
+    let branch_arg = args.value_of("BRANCH")
+        .or(args.value_of("to-branch"))
+        .or(args.value_of("branch"));
     let (branch, remote) = branch_and_remote(subtree_config, branch_arg);
 
     println!("Pulling branch {:?} from remote {:?}", branch, remote);
