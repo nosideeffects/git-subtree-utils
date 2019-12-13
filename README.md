@@ -25,3 +25,15 @@ cargo install --path ./gitstu/
 # See what it can do
 gitstu -h
 ```
+
+### Tips
+
+```bash
+# Ensure your remotes are up to date before pushing or pulling
+git fetch --all
+
+# Tell git to fetch multiple remotes at a time when you are working with more than 1 subtree
+# Defaults to `1` (at a time) -- `0` will tell git to use a reasonable default of parallelism
+git config --global fetch.parallel 0
+
+```
